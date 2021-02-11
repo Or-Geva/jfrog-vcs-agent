@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"os"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -71,9 +70,8 @@ func getLatestCommitSha(bi *buildinfo.PublishedBuildInfo) (string, error) {
 
 func cloneProject(runAt string, vcs *Vcs) (r *git.Repository, err error) {
 	cloneOption := &git.CloneOptions{
-		URL:      vcs.Url,
-		Progress: os.Stdout,
-		Auth:     createCredentials(vcs.Credentials),
+		URL:  vcs.Url,
+		Auth: createCredentials(vcs.Credentials),
 		// Enable git submodules clone if there any.
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 	}

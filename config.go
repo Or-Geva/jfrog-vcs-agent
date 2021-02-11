@@ -13,7 +13,6 @@ import (
 	"github.com/jfrog/jfrog-client-go/artifactory/auth"
 	"github.com/jfrog/jfrog-client-go/config"
 	"github.com/jfrog/jfrog-client-go/utils/io/fileutils"
-	"github.com/jfrog/jfrog-client-go/utils/log"
 )
 
 const (
@@ -38,17 +37,13 @@ type Vcs struct {
 	Branch map[string]string
 }
 
-type BuildTool int
+type BuildTool string
 
 const (
-	Maven BuildTool = iota
-	Gradle
-	Npm
+	Maven  = "maven"
+	Gradle = "gradle"
+	Npm    = "npm"
 )
-
-func (bt BuildTool) String() string {
-	return [...]string{"maven", "gradle", "npm"}[bt]
-}
 
 // Define the 'config.json' file.
 type BuildConfig struct {
@@ -105,7 +100,6 @@ func getBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, err
 		return nil, nil, err
 	}
 	exists, err := fileutils.IsFileExists(configPath, false)
-	log.Info("Found config file at " + configPath)
 	if err != nil {
 		return nil, nil, err
 	}

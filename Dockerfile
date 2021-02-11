@@ -6,6 +6,6 @@ RUN mkdir -p /usr/local/jfrog/bin && \
     echo -ne '#!/bin/bash\nexport PATH=${ORIGIN_PATH}\ncommand jfrog rt gradle $@' > /usr/local/jfrog/bin/gradle && chmod +x /usr/local/jfrog/bin/gradle
 ENV ORIGIN_PATH="${PATH}" PATH="/usr/local/jfrog/bin:${PATH}"
 WORKDIR /workspace
-COPY src /workspace
+COPY . /workspace
 RUN  go build -o executor
 CMD ["/workspace/executor"]

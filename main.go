@@ -6,13 +6,14 @@ import (
 	"strconv"
 
 	"github.com/go-git/go-git/v5"
+	cliLog "github.com/jfrog/jfrog-cli-core/utils/log"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/utils/io/fileutils"
 	"github.com/jfrog/jfrog-client-go/utils/log"
 )
 
 func init() {
-	log.SetLogger(log.NewLogger(log.DEBUG, nil))
+	cliLog.SetDefaultLogger()
 }
 
 // This program runs a series JFrog CLI commands in order to scan git repository. A high level flow overview:
@@ -27,14 +28,19 @@ func main() {
 	defer cleanup()
 	for name, buildName := range c.Vcs.Branch {
 		// Checkout to branch.
+		log.Info("Checkout to '" + name + "' branch")
 		checkIfError(checkoutToBranch(name, r))
 		bi, err := getLatestBuildInfo(sm, buildName)
 		checkIfError(err)
 		commits, err := getCommitsToBuild(r, bi)
 		checkIfError(err)
+		if commits == nil {
+			log.Info("'" + name + "' branch has no new commits since the last run. Skipping... ")
+		}
 		for i, commit := range commits {
 			checkIfError(checkoutToHash(commit.Hash.String(), r))
-			setBuildProps(buildName, commit.Hash.String(), bi.BuildInfo.Number, strconv.Itoa(i))
+			setBuildProps(buildName, commit.Hash.String()[:8], bi.BuildInfo.Number, strconv.Itoa(i))
+			log.Info("Generating build " + os.Getenv(jfrogBuildName) + "/" + os.Getenv(jfrogBuildNumber))
 			checkIfError(build(c.BuildCommand, projectPath))
 			checkIfError(bag(projectPath))
 			checkIfError(publish())
@@ -55,6 +61,7 @@ func setupAgent(c *BuildConfig, sm artifactory.ArtifactoryServicesManager) (*git
 	if err != nil {
 		return nil, "", nil, err
 	}
+	log.Info("Cloning project '" + c.Vcs.Url + "' to '" + tmp + "'")
 	r, err := cloneProject(tmp, c.Vcs)
 	if err != nil {
 		return nil, "", nil, err
