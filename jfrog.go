@@ -1,14 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/buildinfo"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
+	"github.com/jfrog/jfrog-client-go/artifactory/services/utils"
+	"github.com/jfrog/jfrog-client-go/utils/io/content"
 	"github.com/jfrog/jfrog-client-go/utils/log"
 )
 
@@ -75,13 +79,44 @@ func createBuildToolConfigs(serverId string, c *BuildConfig) (err error) {
 
 // Gets the latest build number for 'buildName' from Artifactory.
 // If the build does not exist, return an error.
-func getLatestBuildInfo(sm artifactory.ArtifactoryServicesManager, buildName string) (*buildinfo.PublishedBuildInfo, error) {
-	previousBuild, found, err := sm.GetBuildInfo(services.BuildInfoParams{BuildName: buildName, BuildNumber: "LATEST"})
+func getLatestBuildInfo(sm artifactory.ArtifactoryServicesManager, buildName string) (*buildinfo.BuildInfo, error) {
+	params := services.NewDownloadParams()
+	params.Pattern = "artifactory-build-info/" + buildName + "/*"
+	params.SortBy = []string{"created"}
+	params.SortOrder = "desc"
+	params.Limit = 1
+
+	reader, totalDownloaded, _, err := sm.DownloadFilesWithResultReader(params)
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	defer Close(reader, &err)
+	if totalDownloaded != 1 {
 		return nil, errors.New(fmt.Sprintf("build %s is not found in Artifactory", buildName))
 	}
-	return previousBuild, nil
+	var d []byte
+	bi := new(buildinfo.BuildInfo)
+	for currentFileInfo := new(utils.FileInfo); reader.NextRecord(currentFileInfo) == nil; currentFileInfo = new(utils.FileInfo) {
+		defer deleteFile(currentFileInfo.LocalPath, &err)
+		d, err = ioutil.ReadFile(currentFileInfo.LocalPath)
+		if err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(d, bi); err != nil {
+			return nil, err
+		}
+	}
+	return bi, err
+}
+
+func Close(r *content.ContentReader, e *error) {
+	if err := r.Close(); e == nil {
+		*e = err
+	}
+}
+
+func deleteFile(path string, e *error) {
+	if err := os.Remove(path); e == nil {
+		*e = err
+	}
 }

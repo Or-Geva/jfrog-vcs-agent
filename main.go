@@ -3,13 +3,17 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/go-git/go-git/v5"
 	cliLog "github.com/jfrog/jfrog-cli-core/utils/log"
 	"github.com/jfrog/jfrog-client-go/artifactory"
-	"github.com/jfrog/jfrog-client-go/utils/io/fileutils"
 	"github.com/jfrog/jfrog-client-go/utils/log"
+)
+
+const (
+	defaultName = "project"
 )
 
 func init() {
@@ -39,7 +43,7 @@ func main() {
 		}
 		for i, commit := range commits {
 			checkIfError(checkoutToHash(commit.Hash.String(), r))
-			setBuildProps(buildName, commit.Hash.String()[:8], bi.BuildInfo.Number, strconv.Itoa(i))
+			setBuildProps(buildName, commit.Hash.String()[:8], bi.Number, strconv.Itoa(i))
 			log.Info("Generating build " + os.Getenv(jfrogBuildName) + "/" + os.Getenv(jfrogBuildNumber))
 			checkIfError(build(c.BuildCommand, projectPath))
 			checkIfError(bag(projectPath))
@@ -57,12 +61,20 @@ func setupAgent(c *BuildConfig, sm artifactory.ArtifactoryServicesManager) (*git
 		return nil, "", nil, err
 	}
 	// Create a clone dir.
-	tmp, err := fileutils.CreateTempDir()
+	wd, err := os.Getwd()
 	if err != nil {
 		return nil, "", nil, err
 	}
-	log.Info("Cloning project '" + c.Vcs.Url + "' to '" + tmp + "'")
-	r, err := cloneProject(tmp, c.Vcs)
+	cloneDir := filepath.Join(wd, defaultName)
+	err = os.Mkdir(cloneDir, 0755)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if err != nil {
+		return nil, "", nil, err
+	}
+	log.Info("Cloning project '" + c.Vcs.Url + "' to '" + cloneDir + "'")
+	r, err := cloneProject(cloneDir, c.Vcs)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -70,8 +82,8 @@ func setupAgent(c *BuildConfig, sm artifactory.ArtifactoryServicesManager) (*git
 	if err := createBuildToolConfigs("vcs-superhighway", c); err != nil {
 		return nil, "", nil, err
 	}
-	return r, tmp, func() {
-		if err := os.RemoveAll(tmp); err != nil {
+	return r, cloneDir, func() {
+		if err := os.RemoveAll(cloneDir); err != nil {
 			log.Error(err.Error())
 		}
 		if err := unsetBuildProps(); err != nil {

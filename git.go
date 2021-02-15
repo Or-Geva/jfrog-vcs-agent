@@ -39,7 +39,7 @@ func checkoutToHash(hash string, r *git.Repository) error {
 }
 
 // Returns a list of commits that haven't been scanned since the last run.
-func getCommitsToBuild(r *git.Repository, bi *buildinfo.PublishedBuildInfo) (commitsToBuild []object.Commit, err error) {
+func getCommitsToBuild(r *git.Repository, bi *buildinfo.BuildInfo) (commitsToBuild []object.Commit, err error) {
 	sha, err := getLatestCommitSha(bi)
 	if err != nil {
 		return nil, err
@@ -61,11 +61,11 @@ func getCommitsToBuild(r *git.Repository, bi *buildinfo.PublishedBuildInfo) (com
 }
 
 // Returns the vcs revision in build-info.
-func getLatestCommitSha(bi *buildinfo.PublishedBuildInfo) (string, error) {
-	if len(bi.BuildInfo.VcsList) == 0 {
+func getLatestCommitSha(bi *buildinfo.BuildInfo) (string, error) {
+	if len(bi.VcsList) == 0 {
 		return "", errors.New("no vcs data in build info")
 	}
-	return bi.BuildInfo.VcsList[0].Revision, nil
+	return bi.VcsList[0].Revision, nil
 }
 
 func cloneProject(runAt string, vcs *Vcs) (r *git.Repository, err error) {
