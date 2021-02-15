@@ -60,16 +60,13 @@ func setupAgent(c *BuildConfig, sm artifactory.ArtifactoryServicesManager) (*git
 	if err := createArtServer("vcs-superhighway", c); err != nil {
 		return nil, "", nil, err
 	}
-	// Create a clone dir.
+	// Create clone dir.
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, "", nil, err
 	}
 	cloneDir := filepath.Join(wd, defaultName)
 	err = os.Mkdir(cloneDir, 0755)
-	if err != nil {
-		return nil, "", nil, err
-	}
 	if err != nil {
 		return nil, "", nil, err
 	}

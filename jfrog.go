@@ -51,7 +51,6 @@ func runCmd(runAt string, cmd string) error {
 func createArtServer(serverId string, c *BuildConfig) error {
 	log.Info("Setting up Artifactory server")
 	configCmd := fmt.Sprintf("jfrog rt c %s --interactive=false --url=%s --user=%s --password=%s", serverId, c.JfrogCredentials.Url, c.JfrogCredentials.User, c.JfrogCredentials.Password)
-
 	err := runCmd("", configCmd)
 	if err != nil {
 		log.Info("error: " + err.Error())

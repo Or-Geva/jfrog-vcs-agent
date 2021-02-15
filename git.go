@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/jfrog/jfrog-client-go/artifactory/buildinfo"
+	"github.com/jfrog/jfrog-client-go/utils/log"
 )
 
 const (
@@ -50,13 +52,22 @@ func getCommitsToBuild(r *git.Repository, bi *buildinfo.BuildInfo) (commitsToBui
 		return
 	}
 	// Iterates over the commits from top to buttom. Save the commit hash till 'fromCommitSha' is found.
+	found := false
 	err = cIter.ForEach(func(c *object.Commit) error {
 		if c.Hash.String() != sha {
 			commitsToBuild = append([]object.Commit{*c}, commitsToBuild...)
 			return nil
 		}
+		found = true
 		return storer.ErrStop
 	})
+	if found == false {
+		commitsToBuild = commitsToBuild[len(commitsToBuild)-1:]
+		log.Info("Commit sha: '" + sha + "' wasn't found in the commits log. This may be the result of force push command. As a result, scanning only the latest commit on this branch.")
+	}
+	if len(commitsToBuild) > 0 {
+		log.Info(fmt.Sprintf("Found %v commit(s) that haven't been scanned yet... ", len(commitsToBuild)))
+	}
 	return
 }
 
