@@ -5,7 +5,8 @@ RUN mkdir -p /usr/local/jfrog/bin && \
     echo -ne '#!/bin/bash\nexport PATH=${ORIGIN_PATH}\ncommand jfrog rt mvn $@' > /usr/local/jfrog/bin/mvn && chmod +x /usr/local/jfrog/bin/mvn  && \
     echo -ne '#!/bin/bash\nexport PATH=${ORIGIN_PATH}\ncommand jfrog rt gradle $@' > /usr/local/jfrog/bin/gradle && chmod +x /usr/local/jfrog/bin/gradle
 ENV ORIGIN_PATH="${PATH}" PATH="/usr/local/jfrog/bin:${PATH}"
-WORKDIR /workspace
-COPY . /workspace
-RUN  go build -o executor
-CMD ["/workspace/executor"]
+WORKDIR /agent_home/src
+COPY . /agent_home/src
+RUN  go build -o executor && mv ./executor /usr/local/bin/
+WORKDIR /agent_home/workspace
+CMD ["executor"]

@@ -25,7 +25,7 @@ func init() {
 // 2. Clone & build the git repository.
 // 3. Publish & scan the build-info.
 func main() {
-	c, sm, err := getBuildConfig()
+	c, sm, err := loadBuildConfig()
 	checkIfError(err)
 	r, projectPath, cleanup, err := setupAgent(c, sm)
 	checkIfError(err)

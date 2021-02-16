@@ -94,17 +94,10 @@ func unsetBuildProps() error {
 }
 
 // Load the build configuration. It except to be inside config/config.json on the root project.
-func getBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, error) {
-	configPath, err := filepath.Abs(configFilePath)
+func loadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, error) {
+	configPath, err := getConfigPath()
 	if err != nil {
 		return nil, nil, err
-	}
-	exists, err := fileutils.IsFileExists(configPath, false)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !exists {
-		return nil, nil, errors.New("file 'config.json' is not found in the local directory")
 	}
 	content, err := fileutils.ReadFile(configPath)
 	if err != nil {
@@ -120,6 +113,22 @@ func getBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, err
 		return nil, nil, err
 	}
 	return data, sm, err
+}
+
+func getConfigPath() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	configPath := filepath.Join(dir, "..", "config", "config.json")
+	exists, err := fileutils.IsFileExists(configPath, false)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "", errors.New("file 'config.json' is not found in '" + configPath + "'")
+	}
+	return configPath, nil
 }
 
 func createServiceManager(c *BuildConfig) (artifactory.ArtifactoryServicesManager, error) {
