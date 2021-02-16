@@ -11,9 +11,12 @@ import (
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/buildinfo"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
-	"github.com/jfrog/jfrog-client-go/artifactory/services/utils"
 	"github.com/jfrog/jfrog-client-go/utils/io/content"
 	"github.com/jfrog/jfrog-client-go/utils/log"
+)
+
+const (
+	buildInfoFile = "buildinfo.json"
 )
 
 // runs build command at 'projectPath'.
@@ -81,29 +84,28 @@ func createBuildToolConfigs(serverId string, c *BuildConfig) (err error) {
 func getLatestBuildInfo(sm artifactory.ArtifactoryServicesManager, buildName string) (*buildinfo.BuildInfo, error) {
 	params := services.NewDownloadParams()
 	params.Pattern = "artifactory-build-info/" + buildName + "/*"
+	params.Target = buildInfoFile
 	params.SortBy = []string{"created"}
 	params.SortOrder = "desc"
 	params.Limit = 1
+	params.Flat = true
 
-	reader, totalDownloaded, _, err := sm.DownloadFilesWithResultReader(params)
+	totalDownloaded, _, err := sm.DownloadFiles(params)
 	if err != nil {
 		return nil, err
 	}
-	defer Close(reader, &err)
 	if totalDownloaded != 1 {
 		return nil, errors.New(fmt.Sprintf("build %s is not found in Artifactory", buildName))
 	}
+	defer deleteFile(buildInfoFile, &err)
 	var d []byte
 	bi := new(buildinfo.BuildInfo)
-	for currentFileInfo := new(utils.FileInfo); reader.NextRecord(currentFileInfo) == nil; currentFileInfo = new(utils.FileInfo) {
-		defer deleteFile(currentFileInfo.LocalPath, &err)
-		d, err = ioutil.ReadFile(currentFileInfo.LocalPath)
-		if err != nil {
-			return nil, err
-		}
-		if err = json.Unmarshal(d, bi); err != nil {
-			return nil, err
-		}
+	d, err = ioutil.ReadFile(buildInfoFile)
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(d, bi); err != nil {
+		return nil, err
 	}
 	return bi, err
 }
