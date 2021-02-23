@@ -1,40 +1,35 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	"github.com/jfrog/jfrog-client-go/artifactory"
-	"github.com/jfrog/jfrog-client-go/artifactory/auth"
-	"github.com/jfrog/jfrog-client-go/config"
 	"github.com/jfrog/jfrog-client-go/utils/io/fileutils"
+	"github.com/jfrog/jfrog-client-go/utils/log"
+	"gopkg.in/yaml.v2"
 )
 
 const (
-	// An env var to override the build number. See getNextBuildNumber func.
-	buildNumber = "BUILD_NUMBER"
-	// The build name & number env vars that will be publish to Artifactory.
-	jfrogBuildName   = "JFROG_CLI_BUILD_NAME"
-	jfrogBuildNumber = "JFROG_CLI_BUILD_NUMBER"
-
-	configFilePath = "config/config.json"
+	// config file name on the local agent.
+	configFile = "config.yaml"
 )
 
-type Credentials struct {
-	Url         string
-	User        string
-	Password    string
-	AccessToken string
+type JfrogDetails struct {
+	ArtUrl       string               `yaml:"artUrl"`
+	User         string               `yaml:"user"`
+	Password     string               `yaml:"password"`
+	Repositories map[BuildTool]string `yaml:"repositories"`
+	BuildName    string               `yaml:"buildName"`
 }
 
 type Vcs struct {
-	*Credentials
-	Branch map[string]string
+	Url      string   `yaml:"url"`
+	User     string   `yaml:"user"`
+	Password string   `yaml:"password"`
+	Token    string   `yaml:"token"`
+	Branches []string `yaml:"branches"`
 }
 
 type BuildTool string
@@ -45,55 +40,15 @@ const (
 	Npm    = "npm"
 )
 
-// Define the 'config.json' file.
+// Define the file 'config.yaml'.
 type BuildConfig struct {
-	BuildCommand         string
-	BuildToolsRepository map[BuildTool]string
-	Vcs                  *Vcs
-	JfrogCredentials     *Credentials
+	ProjectName  string        `yaml:"projectName"`
+	BuildCommand string        `yaml:"buildCommand"`
+	Vcs          *Vcs          `yaml:"vcs"`
+	Jfrog        *JfrogDetails `yaml:"jfrog"`
 }
 
-// Set jfrog cli build-name and build-number in env vars.
-func setBuildProps(buildName, commitSha, prevBuildNumber, runNumber string) (err error) {
-	if err := os.Setenv(jfrogBuildName, buildName); err != nil {
-		return err
-	}
-	nbn, err := getNextBuildNumber(prevBuildNumber)
-	if err != nil {
-		return err
-	}
-	return os.Setenv(jfrogBuildNumber, fmt.Sprintf("%s.%s-%s", nbn, runNumber, commitSha))
-}
-
-// Return the build number to publish for the current run according to the 'BUILD_NUMBER' env var.
-// However, if it doesn't exist, uses the last build number+1 as a failback.
-func getNextBuildNumber(prevBuildNumber string) (nbn string, err error) {
-	bn := 0
-	if buildNumber := os.Getenv(buildNumber); buildNumber != "" {
-		bn, err = strconv.Atoi(buildNumber)
-		if err != nil {
-			return
-		}
-	} else {
-		prevBuildNumberIdx := strings.Index(prevBuildNumber, ".")
-		bn, err = strconv.Atoi(prevBuildNumber[:prevBuildNumberIdx])
-		if err != nil {
-			return
-		}
-		bn++
-	}
-	nbn = strconv.Itoa(bn)
-	return
-}
-
-func unsetBuildProps() error {
-	if err := os.Unsetenv(jfrogBuildName); err != nil {
-		return err
-	}
-	return os.Unsetenv(jfrogBuildNumber)
-}
-
-// Load the build configuration. It except to be inside config/config.json on the root project.
+// Load the build configuration from a yaml file.
 func loadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, error) {
 	configPath, err := getConfigPath()
 	if err != nil {
@@ -104,7 +59,7 @@ func loadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, er
 		return nil, nil, err
 	}
 	data := new(BuildConfig)
-	err = json.Unmarshal(content, data)
+	err = yaml.Unmarshal(content, data)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -115,35 +70,20 @@ func loadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, er
 	return data, sm, err
 }
 
+// Config directory is expected to be in the parent directory.
 func getConfigPath() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	configPath := filepath.Join(dir, "..", "config", "config.json")
+	configPath := filepath.Join(dir, "..", "config", configFile)
 	exists, err := fileutils.IsFileExists(configPath, false)
 	if err != nil {
 		return "", err
 	}
 	if !exists {
-		return "", errors.New("file 'config.json' is not found in '" + configPath + "'")
+		return "", errors.New("file '" + configFile + "' is not found in '" + configPath + "'")
 	}
+	log.Info("Found config file at '" + configPath + "'")
 	return configPath, nil
-}
-
-func createServiceManager(c *BuildConfig) (artifactory.ArtifactoryServicesManager, error) {
-	rtDetails := auth.NewArtifactoryDetails()
-	rtDetails.SetUrl(c.JfrogCredentials.Url)
-	rtDetails.SetUser(c.JfrogCredentials.User)
-	rtDetails.SetPassword(c.JfrogCredentials.Password)
-	rtDetails.SetAccessToken(c.JfrogCredentials.AccessToken)
-
-	serviceConfig, err := config.NewConfigBuilder().
-		SetServiceDetails(rtDetails).
-		SetDryRun(false).
-		Build()
-	if err != nil {
-		return nil, err
-	}
-	return artifactory.New(&rtDetails, serviceConfig)
 }
