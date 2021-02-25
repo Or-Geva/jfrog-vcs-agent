@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -50,24 +51,34 @@ type BuildConfig struct {
 
 // Load the build configuration from a yaml file.
 func loadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, error) {
+	data, err := getConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+	config := new(BuildConfig)
+	err = yaml.Unmarshal(data, config)
+	if err != nil {
+		return nil, nil, err
+	}
+	sm, err := createServiceManager(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	return config, sm, err
+}
+
+func getConfig() ([]byte, error) {
+	// Load from env var.
+	if fromEnv := os.Getenv("JFROG_VCS_AGENT_CONFIG"); fromEnv != "" {
+		data, err := base64.StdEncoding.DecodeString(fromEnv)
+		return data, err
+	}
+	// Load from local file.
 	configPath, err := getConfigPath()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	content, err := fileutils.ReadFile(configPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	data := new(BuildConfig)
-	err = yaml.Unmarshal(content, data)
-	if err != nil {
-		return nil, nil, err
-	}
-	sm, err := createServiceManager(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	return data, sm, err
+	return fileutils.ReadFile(configPath)
 }
 
 // Config directory is expected to be in the parent directory.
