@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"encoding/base64"
@@ -50,7 +50,7 @@ type BuildConfig struct {
 }
 
 // Load the build configuration from a yaml file.
-func loadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, error) {
+func LoadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, error) {
 	data, err := getConfig()
 	if err != nil {
 		return nil, nil, err

@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ const (
 	defaultRemote = "origin"
 )
 
-func checkoutBranch(branch string, r *git.Repository) error {
+func CheckoutBranch(branch string, r *git.Repository) error {
 	log.Info("Checkout to '" + branch + "' branch")
 	w, err := r.Worktree()
 	if err != nil {
@@ -33,7 +33,7 @@ func checkoutBranch(branch string, r *git.Repository) error {
 	})
 }
 
-func checkoutHash(hash string, r *git.Repository) error {
+func CheckoutHash(hash string, r *git.Repository) error {
 	log.Info("Checkout to '" + hash + "' commmit")
 	w, err := r.Worktree()
 	if err != nil {
@@ -47,7 +47,7 @@ func checkoutHash(hash string, r *git.Repository) error {
 
 // Returns the commits bwtween fromSha - HEAD.
 // Due to 'Force push',the commit may be missing. As a result, the latest commit will be returned.
-func getCommitsRange(fromSha string, r *git.Repository) (commitsToBuild []object.Commit, err error) {
+func GetCommitsRange(fromSha string, r *git.Repository) (commitsToBuild []object.Commit, err error) {
 	_, err = r.CommitObject(plumbing.NewHash(fromSha))
 	getLatestCommit := false
 	if err != nil {
@@ -71,7 +71,7 @@ func getCommitsRange(fromSha string, r *git.Repository) (commitsToBuild []object
 	return
 }
 
-func clone(runAt string, vcs *Vcs) (r *git.Repository, err error) {
+func Clone(runAt string, vcs *Vcs) (r *git.Repository, err error) {
 	cloneOption := &git.CloneOptions{
 		URL:  vcs.Url,
 		Auth: createCredentials(vcs),
@@ -90,13 +90,13 @@ func createCredentials(c *Vcs) (auth transport.AuthMethod) {
 	return &http.BasicAuth{Username: c.User, Password: password}
 }
 
-func getCommitsToScan(bi *buildinfo.BuildInfo, r *git.Repository, vcsUrl string) ([]object.Commit, error) {
+func GetCommitsToScan(bi *buildinfo.BuildInfo, r *git.Repository, vcsUrl string) ([]object.Commit, error) {
 	log.Info("Search the latest commit revision in the build-info")
 	sha, err := getLatestCommitSha(bi, vcsUrl)
 	if err != nil {
 		return nil, err
 	}
-	commits, err := getCommitsRange(sha, r)
+	commits, err := GetCommitsRange(sha, r)
 	if commits == nil {
 		log.Info("No new commits since the last run. Skipping... ")
 	} else {
@@ -105,14 +105,14 @@ func getCommitsToScan(bi *buildinfo.BuildInfo, r *git.Repository, vcsUrl string)
 	return commits, err
 }
 
-func shortCommitHash(hash string) string {
+func ShortCommitHash(hash string) string {
 	return hash[:8]
 }
 
 // Create a local directory for the project that is being cloned.
 // Default path is at /agent_home/project/.
 // Override if exist.
-func createCloneDir() (string, error) {
+func CreateCloneDir() (string, error) {
 	// Create clone dir.
 	wd, err := os.Getwd()
 	if err != nil {
