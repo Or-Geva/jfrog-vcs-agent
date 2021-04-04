@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -19,13 +18,15 @@ import (
 )
 
 const (
-	// Default name for downlowing build-info from Artifactory
+	// Name of downloaded build-info file from Artifactory.
 	buildInfoFile = "buildinfo.json"
-	// A unique ID for the new Artifactory server configuration.
+	// A unique ID for a new Artifactory server configuration.
 	serverId = "vcs-superhighway"
-	// Set the default buildNumber for every build branch.
+
+	// Environment variables
+	// The next build number to be published by JFrog CLI (Optional).
 	buildNumber = "BUILD_NUMBER"
-	// The build name & number env vars to be used by JFrog CLI commands.
+	// The build name & number to be used by JFrog CLI commands.
 	jfrogBuildName   = "JFROG_CLI_BUILD_NAME"
 	jfrogBuildNumber = "JFROG_CLI_BUILD_NUMBER"
 )
@@ -37,28 +38,28 @@ func CreateArtServer(c *BuildConfig) error {
 	return RunCmd("", configCmd)
 }
 
-// runs Build command at 'projectPath'.
-// Build-name & Build-number expect to be in env vars
+// Runs build command at 'projectPath'.
+// Build-name & build-number are expected to be set as env vars
 func Build(buildCommand, projectPath string) error {
-	log.Info("Execute build command " + buildCommand)
+	log.Info("Executing build command '%s'...", buildCommand)
 	return RunCmd(projectPath, buildCommand)
 }
 
-// Build-name & build-number expect to be in env vars
+// Build-name & build-number are expected to be set as env vars
 func Bag(projectPath string) error {
-	log.Info("Collect VCS details at '" + projectPath + "'")
+	log.Info("Collecting VCS details...")
 	return RunCmd(projectPath, "jfrog rt bag --server-id="+serverId)
 }
 
-// Build-name & build-number expect to be in env vars
+// Build-name & build-number are expected to be set as env vars
 func Publish() error {
-	log.Info("Publish the build to Artifactory")
+	log.Info("Publishing the build to Artifactory...")
 	return RunCmd("", "jfrog rt bp --server-id="+serverId)
 }
 
-// Build-name & build-number expect to be in env vars
+// Build-name & build-number are expected to be set as env vars
 func BuildScan() error {
-	log.Info("Scan the published build with Xray")
+	log.Info("Scanning the published build with Xray...")
 	return RunCmd("", "jfrog rt bs --server-id="+serverId)
 }
 
@@ -92,25 +93,25 @@ func CreateBuildToolConfigs(runAt string, c *BuildConfig) (err error) {
 			return
 		}
 	}
-	return nil
+	return
 }
 
-// Set jfrog cli build-name and build-number in env vars to be use by the agent during the build.
+// Set jfrog cli build-name and build-number as env vars, to be use by the agent during the build.
 func SetBuildProps(buildName, commitSha, prevBuildNumber, runNumber string) (err error) {
-	log.Info("Generating JFrog CLI build environment variables")
+	log.Info("Generating JFrog CLI build environment variables...")
 	if err := os.Setenv(jfrogBuildName, buildName); err != nil {
 		return err
 	}
-	nbn, err := GetNextBuildNumber(prevBuildNumber)
+	buildNumber, err := GetNextBuildNumber(prevBuildNumber)
 	if err != nil {
 		return err
 	}
-	return os.Setenv(jfrogBuildNumber, fmt.Sprintf("%s.%s-%s", nbn, runNumber, commitSha))
+	return os.Setenv(jfrogBuildNumber, fmt.Sprintf("%s.%s-%s", buildNumber, runNumber, commitSha))
 }
 
 // Return the value of 'BUILD_NUMBER' env var.
 // If not configured, return the last run build number incremented by 1.
-func GetNextBuildNumber(prevBuildNumber string) (nbn string, err error) {
+func GetNextBuildNumber(prevBuildNumber string) (nextBuildNumber string, err error) {
 	bn := 0
 	if buildNumber := os.Getenv(buildNumber); buildNumber != "" {
 		bn, err = strconv.Atoi(buildNumber)
@@ -125,7 +126,7 @@ func GetNextBuildNumber(prevBuildNumber string) (nbn string, err error) {
 		}
 		bn++
 	}
-	nbn = strconv.Itoa(bn)
+	nextBuildNumber = strconv.Itoa(bn)
 	return
 }
 
@@ -144,7 +145,7 @@ func UnsetJfrogBuildProps() error {
 
 // Gets the latest build number from Artifactory.
 // If the build does not exist, return an error.
-func GetLatestBuildInfo(sm artifactory.ArtifactoryServicesManager, buildName string) (bi *buildinfo.BuildInfo, err error) {
+func GetLatestBuildInfo(ArtifactoryServicesManager artifactory.ArtifactoryServicesManager, buildName string) (buildInfo *buildinfo.BuildInfo, err error) {
 	params := services.NewDownloadParams()
 	params.Pattern = "artifactory-build-info/" + buildName + "/*"
 	params.Target = buildInfoFile
@@ -152,24 +153,27 @@ func GetLatestBuildInfo(sm artifactory.ArtifactoryServicesManager, buildName str
 	params.SortOrder = "desc"
 	params.Limit = 1
 	params.Flat = true
-	log.Info("Searching the latest build for '" + buildName + "' build")
+	log.Info("Searching the latest build for '%s' build...", buildName)
 	var totalDownloaded int
-	totalDownloaded, _, err = sm.DownloadFiles(params)
-	if err != nil || totalDownloaded == 0 {
-		return nil, errors.New(fmt.Sprintf("build '%s' is not found in Artifactory", buildName))
+	totalDownloaded, _, err = ArtifactoryServicesManager.DownloadFiles(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download build '%s' from Artifactory, Error: '%s'", buildName, err.Error())
+	}
+	if totalDownloaded == 0 {
+		return nil, fmt.Errorf("build '%s' is not found in Artifactory", buildName)
 	}
 	defer func() {
 		if e := os.Remove(buildInfoFile); err == nil {
 			err = e
 		}
 	}()
-	var d []byte
-	bi = new(buildinfo.BuildInfo)
-	d, err = ioutil.ReadFile(buildInfoFile)
+	var data []byte
+	buildInfo = new(buildinfo.BuildInfo)
+	data, err = ioutil.ReadFile(buildInfoFile)
 	if err != nil {
 		return
 	}
-	err = json.Unmarshal(d, bi)
+	err = json.Unmarshal(data, buildInfo)
 	return
 }
 
@@ -178,15 +182,15 @@ func GetLatestBuildInfo(sm artifactory.ArtifactoryServicesManager, buildName str
 func GetBranchBuildName(branch string, c *BuildConfig) string {
 	buildName := strings.Replace(c.Jfrog.BuildName, "${projectName}", c.ProjectName, -1)
 	buildName = strings.Replace(buildName, "${branch}", branch, -1)
-	log.Info("Associate build to the branch is '" + buildName + "'")
+	log.Info("The associate branch build-name is '%s'", buildName)
 	return buildName
 }
 
-func createServiceManager(c *BuildConfig) (artifactory.ArtifactoryServicesManager, error) {
+func createServiceManager(buildConfig *BuildConfig) (artifactory.ArtifactoryServicesManager, error) {
 	rtDetails := auth.NewArtifactoryDetails()
-	rtDetails.SetUrl(c.Jfrog.ArtUrl)
-	rtDetails.SetUser(c.Jfrog.User)
-	rtDetails.SetPassword(c.Jfrog.Password)
+	rtDetails.SetUrl(buildConfig.Jfrog.ArtUrl)
+	rtDetails.SetUser(buildConfig.Jfrog.User)
+	rtDetails.SetPassword(buildConfig.Jfrog.Password)
 
 	serviceConfig, err := config.NewConfigBuilder().
 		SetServiceDetails(rtDetails).
@@ -199,11 +203,11 @@ func createServiceManager(c *BuildConfig) (artifactory.ArtifactoryServicesManage
 }
 
 // Returns the vcs revision from build-info.
-func getLatestCommitSha(bi *buildinfo.BuildInfo, vcsUrl string) (string, error) {
+func getBuildCommitSha(bi *buildinfo.BuildInfo, vcsUrl string) (string, error) {
 	for _, vcs := range bi.VcsList {
 		if vcs.Url == vcsUrl {
 			return vcs.Revision, nil
 		}
 	}
-	return "", errors.New("No revision is found for git repository: '" + vcsUrl + "'")
+	return "", fmt.Errorf("No revision is found for git repository: '%s'", vcsUrl)
 }

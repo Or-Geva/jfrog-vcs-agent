@@ -2,7 +2,7 @@ package utils
 
 import (
 	"encoding/base64"
-	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -13,9 +13,18 @@ import (
 )
 
 const (
-	// config file name on the local agent.
-	configFile = "config.yaml"
+	// Config file name on the local agent.
+	configFile   = "config.yaml"
+	configEnvVar = "JFROG_VCS_AGENT_CONFIG"
 )
+
+// Define the file 'config.yaml'.
+type BuildConfig struct {
+	ProjectName  string        `yaml:"projectName"`
+	BuildCommand string        `yaml:"buildCommand"`
+	Vcs          *Vcs          `yaml:"vcs"`
+	Jfrog        *JfrogDetails `yaml:"jfrog"`
+}
 
 type JfrogDetails struct {
 	ArtUrl       string               `yaml:"artUrl"`
@@ -41,13 +50,7 @@ const (
 	Npm    = "npm"
 )
 
-// Define the file 'config.yaml'.
-type BuildConfig struct {
-	ProjectName  string        `yaml:"projectName"`
-	BuildCommand string        `yaml:"buildCommand"`
-	Vcs          *Vcs          `yaml:"vcs"`
-	Jfrog        *JfrogDetails `yaml:"jfrog"`
-}
+var configPath = filepath.Join("agent_home", "config", configFile)
 
 // Load the build configuration from a yaml file.
 func LoadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, error) {
@@ -60,17 +63,20 @@ func LoadBuildConfig() (*BuildConfig, artifactory.ArtifactoryServicesManager, er
 	if err != nil {
 		return nil, nil, err
 	}
-	sm, err := createServiceManager(config)
+	artifactoryServicesManager, err := createServiceManager(config)
 	if err != nil {
 		return nil, nil, err
 	}
-	return config, sm, err
+	return config, artifactoryServicesManager, err
 }
 
 func getConfig() ([]byte, error) {
 	// Load from env var.
-	if fromEnv := os.Getenv("JFROG_VCS_AGENT_CONFIG"); fromEnv != "" {
+	if fromEnv := os.Getenv(configEnvVar); fromEnv != "" {
 		data, err := base64.StdEncoding.DecodeString(fromEnv)
+		if err != nil {
+			err = fmt.Errorf("Failed decode environment variable '%s'. Error: '%s'", configEnvVar, err.Error())
+		}
 		return data, err
 	}
 	// Load from local file.
@@ -83,17 +89,12 @@ func getConfig() ([]byte, error) {
 
 // Config directory is expected to be in the parent directory.
 func getConfigPath() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	configPath := filepath.Join(dir, "..", "config", configFile)
 	exists, err := fileutils.IsFileExists(configPath, false)
 	if err != nil {
 		return "", err
 	}
 	if !exists {
-		return "", errors.New("file '" + configFile + "' is not found in '" + configPath + "'")
+		return "", fmt.Errorf("file '%s' is not found in '%s'", configFile, configPath)
 	}
 	log.Info("Found config file at '" + configPath + "'")
 	return configPath, nil

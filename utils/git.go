@@ -47,7 +47,7 @@ func CheckoutHash(hash string, r *git.Repository) error {
 
 // Returns the commits bwtween fromSha - HEAD.
 // Due to 'Force push',the commit may be missing. As a result, the latest commit will be returned.
-func GetCommitsRange(fromSha string, r *git.Repository) (commitsToBuild []object.Commit, err error) {
+func GetCommitsRange(fromSha string, r *git.Repository) (commits []object.Commit, err error) {
 	_, err = r.CommitObject(plumbing.NewHash(fromSha))
 	getLatestCommit := false
 	if err != nil {
@@ -60,25 +60,28 @@ func GetCommitsRange(fromSha string, r *git.Repository) (commitsToBuild []object
 	}
 	// Iterates over the commits from top to buttom. Save the commit hash till 'fromSha' is found.
 	err = cIter.ForEach(func(c *object.Commit) error {
-		if c.Hash.String() != fromSha {
-			commitsToBuild = append([]object.Commit{*c}, commitsToBuild...)
-			if !getLatestCommit {
-				return nil
-			}
+		found := c.Hash.String() == fromSha
+		if !found {
+			commits = append([]object.Commit{*c}, commits...)
 		}
-		return storer.ErrStop
+		if found || getLatestCommit {
+			return storer.ErrStop
+		}
+		return nil
 	})
 	return
 }
 
-func Clone(runAt string, vcs *Vcs) (r *git.Repository, err error) {
+// Clone a vcs repository into the path.
+// If the path is not empty, ErrRepositoryAlreadyExists is returned.
+func Clone(path string, vcs *Vcs) (gitRepo *git.Repository, err error) {
 	cloneOption := &git.CloneOptions{
 		URL:  vcs.Url,
 		Auth: createCredentials(vcs),
-		// Enable git submodules clone if there any.
+		// Enable git submodules clone.
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 	}
-	r, err = git.PlainClone(runAt, false, cloneOption)
+	gitRepo, err = git.PlainClone(path, false, cloneOption)
 	return
 }
 
@@ -91,8 +94,8 @@ func createCredentials(c *Vcs) (auth transport.AuthMethod) {
 }
 
 func GetCommitsToScan(bi *buildinfo.BuildInfo, r *git.Repository, vcsUrl string) ([]object.Commit, error) {
-	log.Info("Search the latest commit revision in the build-info")
-	sha, err := getLatestCommitSha(bi, vcsUrl)
+	log.Info("Searching the latest commit revision in the build-info...")
+	sha, err := getBuildCommitSha(bi, vcsUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +108,7 @@ func GetCommitsToScan(bi *buildinfo.BuildInfo, r *git.Repository, vcsUrl string)
 	return commits, err
 }
 
-func ShortCommitHash(hash string) string {
+func ToShortCommitHash(hash string) string {
 	return hash[:8]
 }
 
